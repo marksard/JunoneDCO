@@ -33,7 +33,7 @@ I found the references in the following link very helpful.
 |SAW|SAW<br> BIPOLER 10Vpp|
 |MIX|SQUARE AND SAW MIX<br>BIPOLER 10Vpp|
 
-Assumed operating frequency from 0 Hz to around 8 kHz.
+Assumed operating frequency from 0 Hz to around 5 kHz.
 
 
 ### Controller
@@ -50,6 +50,6 @@ Assumed operating frequency from 0 Hz to around 8 kHz.
 
 ## Schematic
 
-![img](/_data/JUNONE%20DCO%20Schematic%20rev1.0.0.png)
+![img](_data/JUNONE%20DCO%20Schematic%20rev1.0.0.png)
 
 ## Demonstration
