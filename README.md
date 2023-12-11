@@ -52,4 +52,22 @@ Assumed operating frequency from 0 Hz to around 5 kHz.
 
 ![img](_data/JUNONE%20DCO%20Schematic%20rev1.0.0.png)
 
-## Demonstration
+
+## Waveform
+
+## Waveform
+
+Square
+![img](_data/junondco_wave_squ.png)  
+
+Saw
+![img](_data/junondco_wave_saw.png)  
+
+Saw (low frequency. The rectangular waveform also becomes pulse wave-like at this time.)
+![img](_data/junondco_wave_saw_low.png)  
+
+Square + Saw Mix out
+![img](_data/junondco_wave_mix.png)  
+
+Mix out PWM
+![img](_data/junondco_wave_mix_pwm.png)  
