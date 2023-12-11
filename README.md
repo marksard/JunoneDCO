@@ -52,9 +52,6 @@ Assumed operating frequency from 0 Hz to around 5 kHz.
 
 ![img](_data/JUNONE%20DCO%20Schematic%20rev1.0.0.png)
 
-
-## Waveform
-
 ## Waveform
 
 Square
