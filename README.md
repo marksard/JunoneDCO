@@ -48,6 +48,8 @@ Assumed operating frequency from 0 Hz to around 5 kHz.
 
 ## Image
 
+![img](https://marksard.github.io/assets/photos/20231214_IMGP8479.jpg)
+
 ## Schematic
 
 ![img](_data/JUNONE%20DCO%20Schematic%20rev1.0.0.png)
