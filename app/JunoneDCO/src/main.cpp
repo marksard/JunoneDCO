@@ -1,6 +1,8 @@
 /*!
  * main
  * Copyright 2023 marksard
+ * This software is released under the MIT license.
+ * see https://opensource.org/licenses/MIT
  */ 
 
 #include <Arduino.h>
@@ -76,8 +78,9 @@ void setup()
 
 void loop()
 {
-    // static uint8_t dispCount = 0;
+    static uint8_t dispCount = 0;
     static int16_t voctTune = 0;
+    // static int16_t resetTune = 0;
     static int16_t vFine = 0;
     uint16_t voct = vOct.analogReadDirect();
     uint16_t coarse = (float)potCoarse.analogRead(false) / rateRatio;
@@ -93,7 +96,7 @@ void loop()
         {
             if (noteFreq[i] <= (float)coarse)
             {
-                coarse = noteFreq[i];
+                // coarse = noteFreq[i];
                 fineWidth = noteFreq[i + 2] - noteFreq[i];
                 break;
             }
@@ -101,7 +104,9 @@ void loop()
         
         vFine = (potAux.analogRead() / ((float)ADC_RESO / fineWidth)) - (fineWidth / 2);
         coarse += vFine;
+        // resetTune = (potAux.analogRead() / ((float)ADC_RESO / 50.0));
     }
+
 
     // 0to5VのV/OCTの想定でmap変換。RP2040では抵抗分圧で5V->3.3Vにしておく
     uint16_t freqency = coarse *
@@ -109,26 +114,28 @@ void loop()
                         fm;
 
     tuningWordM = UINT32_MAX_P1 * freqency / intrruptClock;
-    biasLevel = map((uint16_t)freqency, 0, MAX_FREQ, 10, PWM_RESO);
+    biasLevel = map((uint16_t)freqency, 0, MAX_FREQ, 5, PWM_RESO); // 下限は波形みながら調整
 
-    // dispCount++;
-    // if (dispCount == 0)
-    // {
-    //     Serial.print(voct);
-    //     Serial.print(", ");
-    //     Serial.print(coarse);
-    //     Serial.print(", ");
-    //     Serial.print(fm);
-    //     Serial.print(", ");
-    //     Serial.print(voctTune);
-    //     Serial.print(", ");
-    //     Serial.print(vFine);
-    //     Serial.print(", ");
-    //     Serial.print(freqency);
-    //     Serial.print(", ");
-    //     Serial.print(biasLevel);
-    //     Serial.println();
-    // }
+    dispCount++;
+    if (dispCount == 0)
+    {
+        Serial.print(voct);
+        Serial.print(", ");
+        Serial.print(coarse);
+        Serial.print(", ");
+        Serial.print(fm);
+        Serial.print(", ");
+        Serial.print(voctTune);
+        Serial.print(", ");
+        // Serial.print(resetTune);
+        // Serial.print(", ");
+        Serial.print(vFine);
+        Serial.print(", ");
+        Serial.print(freqency);
+        Serial.print(", ");
+        Serial.print(biasLevel);
+        Serial.println();
+    }
 
     sleep_us(50); // 20kHz
 }
