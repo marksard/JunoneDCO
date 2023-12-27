@@ -9,6 +9,7 @@
 #include <hardware/pwm.h>
 #include "SmoothAnalogRead.hpp"
 #include "note.h"
+#include "EepromData.h"
 
 #define DCO_GAIN 6
 #define DCO_CLOCK 7
@@ -66,6 +67,8 @@ bool intrTimer(struct repeating_timer *t)
     return true;
 }
 
+static uint8_t configMode = 0;
+static UserConfig userConfig;
 void setup()
 {
     analogReadResolution(12);
@@ -74,23 +77,40 @@ void setup()
     // 第一引数は負数でコールバック開始-開始間
     add_repeating_timer_us(-1 * TIMER_INTR_TM, intrTimer, NULL, &timer);
     initPWM();
+
+    initEEPROM();
+    loadUserConfig(&userConfig);
+    uint16_t coarse = (float)potCoarse.analogRead(false) / rateRatio;
+    if (coarse == 0 && digitalRead(FREQ_TONE) == LOW)
+    {
+        configMode = 1;
+    }
 }
 
 void loop()
 {
     static uint8_t dispCount = 0;
-    static int16_t voctTune = 0;
     // static int16_t resetTune = 0;
     static int16_t vFine = 0;
     uint16_t voct = vOct.analogReadDirect();
     uint16_t coarse = (float)potCoarse.analogRead(false) / rateRatio;
     uint16_t fm = (float)potFM.analogRead(false) / fmRatio;
+    // V/OCTのHIGH側微調整
     if (digitalRead(FREQ_TONE) == LOW)
     {
-        voctTune = (potAux.analogRead() / ((float)ADC_RESO / 400.0)) - (400 >> 1);
+        if (configMode == 1)
+        {
+            userConfig.voctTune = (potAux.analogRead() / ((float)ADC_RESO / 400.0)) - (400 >> 1);
+        }
     }
     else
     {
+        if (configMode == 1)
+        {
+            saveUserConfig(&userConfig);
+            configMode = 0;
+        }
+        
         float fineWidth = 0;
         for (int i = 127; i >= 0; --i)
         {
@@ -110,7 +130,7 @@ void loop()
 
     // 0to5VのV/OCTの想定でmap変換。RP2040では抵抗分圧で5V->3.3Vにしておく
     uint16_t freqency = coarse *
-                            (float)pow(2, map(voct, 0, ADC_RESO - voctTune, 0, DAC_MAX_MILLVOLT) * 0.001) +
+                            (float)pow(2, map(voct, 0, ADC_RESO - userConfig.voctTune, 0, DAC_MAX_MILLVOLT) * 0.001) +
                         fm;
 
     tuningWordM = UINT32_MAX_P1 * freqency / intrruptClock;
@@ -125,7 +145,7 @@ void loop()
         Serial.print(", ");
         Serial.print(fm);
         Serial.print(", ");
-        Serial.print(voctTune);
+        Serial.print(userConfig.voctTune);
         Serial.print(", ");
         // Serial.print(resetTune);
         // Serial.print(", ");
