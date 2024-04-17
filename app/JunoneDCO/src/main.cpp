@@ -18,14 +18,19 @@
 #define COARSE A2
 #define VOCT A1
 #define FREQMOD A0
+#define PWM_INTR_PIN D25 // D0/D1ピンとPWMチャンネルがかぶらないように
 
-#define PWM_RESO 1024
-#define TIMER_INTR_TM 10      // us == 100kHz
+#define SAMPLE_FREQ 120000 //一応この辺までいける
+#define PWM_RESO 4096
+#define PWM_RESO_BIT 12
+
 #define DAC_MAX_MILLVOLT 5000 // mV
 #define ADC_RESO 4096
 #define MAX_COARSE_FREQ 550
 #define MAX_FREQ 5000
 #define UINT32_MAX_P1 4294967296
+
+#define OSC_WAVE_BIT 32
 
 static SmoothAnalogRead vOct(VOCT);
 static SmoothAnalogRead potCoarse(COARSE);
@@ -36,35 +41,59 @@ static repeating_timer timer;
 const static float rateRatio = (float)ADC_RESO / (float)MAX_COARSE_FREQ;
 const static float fmRatio = (float)ADC_RESO / (float)(MAX_COARSE_FREQ);
 
-const static float intrruptClock = 1000000.0 / (float)TIMER_INTR_TM; // == 1sec / 10us == 1000000us / 10us == 100kHz
+const static float intrruptClock = SAMPLE_FREQ;
 const static uint16_t pulseWidth = ADC_RESO / 2;
+const uint32_t indexBit = OSC_WAVE_BIT - PWM_RESO_BIT;
 
 static uint32_t tuningWordM = 0;
 static uint16_t biasLevel = 0;
 
 extern const float noteFreq[];
+static uint interruptSliceNum;
 
-void initPWM()
+void interruptPWM()
 {
-    gpio_set_function(DCO_GAIN, GPIO_FUNC_PWM);
-    uint potSlice = pwm_gpio_to_slice_num(DCO_GAIN);
-    // 最速設定（可能な限り高い周波数にしてRCの値をあげることなく平滑な電圧を得たい）
-    // clockdiv = 125MHz / (PWM_RESO * 欲しいfreq)
-    // 欲しいfreq = 125MHz / (PWM_RESO * clockdiv)
-    pwm_set_clkdiv(potSlice, 1);
-    pwm_set_wrap(potSlice, PWM_RESO - 1);
-    pwm_set_enabled(potSlice, true);
-}
+    pwm_clear_irq(interruptSliceNum);
+    // digitalWrite(GATE_A, HIGH);
 
-bool intrTimer(struct repeating_timer *t)
-{
     static uint32_t phaseAccum = 0;
     phaseAccum = phaseAccum + tuningWordM;
-    int index = phaseAccum >> 20;
+    int index = phaseAccum >> indexBit;
     byte reset = index < pulseWidth ? HIGH : LOW;
     gpio_put(DCO_CLOCK, reset);
     pwm_set_gpio_level(DCO_GAIN, biasLevel);
-    return true;
+
+    // digitalWrite(GATE_A, LOW);
+}
+
+// OUT_A/Bとは違うPWMチャンネルのPWM割り込みにすること
+void initPWMIntr(uint gpio)
+{
+    gpio_set_function(gpio, GPIO_FUNC_PWM);
+    uint slice = pwm_gpio_to_slice_num(gpio);
+
+    interruptSliceNum = slice;
+    pwm_clear_irq(slice);
+    pwm_set_irq_enabled(slice, true);
+    irq_set_exclusive_handler(PWM_IRQ_WRAP, interruptPWM);
+    irq_set_enabled(PWM_IRQ_WRAP, true);
+
+    // 割り込み回数をRESOの1/4にして、サンプルレートを上げられるように
+    uint32_t reso = (PWM_RESO >> 2);
+    pwm_set_wrap(slice, reso - 1);
+    pwm_set_enabled(slice, true);
+    // clockdiv = 125MHz / (PWM_RESO * 欲しいfreq)
+    pwm_set_clkdiv(slice, 125000000.0 / (reso * SAMPLE_FREQ));
+}
+
+void initPWM(uint gpio)
+{
+    gpio_set_function(gpio, GPIO_FUNC_PWM);
+    uint slice = pwm_gpio_to_slice_num(gpio);
+    pwm_set_wrap(slice, PWM_RESO - 1);
+    pwm_set_enabled(slice, true);
+    // 最速にして滑らかなPWMを得る
+    pwm_set_clkdiv(slice, 1);
 }
 
 static uint8_t configMode = 0;
@@ -74,9 +103,8 @@ void setup()
     analogReadResolution(12);
     pinMode(DCO_CLOCK, OUTPUT);
     pinMode(FREQ_TONE, INPUT_PULLUP);
-    // 第一引数は負数でコールバック開始-開始間
-    add_repeating_timer_us(-1 * TIMER_INTR_TM, intrTimer, NULL, &timer);
-    initPWM();
+    initPWMIntr(PWM_INTR_PIN);
+    initPWM(DCO_GAIN);
 
     initEEPROM();
     loadUserConfig(&userConfig);
@@ -134,7 +162,7 @@ void loop()
                         fm;
 
     tuningWordM = UINT32_MAX_P1 * freqency / intrruptClock;
-    biasLevel = map((uint16_t)freqency, 0, MAX_FREQ, 5, PWM_RESO); // 下限は波形みながら調整
+    biasLevel = map((uint16_t)freqency, 0, MAX_FREQ, 20, PWM_RESO); // 下限は波形みながら調整
 
     dispCount++;
     if (dispCount == 0)
