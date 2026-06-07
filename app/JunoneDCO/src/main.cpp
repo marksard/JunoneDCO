@@ -8,7 +8,7 @@
 #include <Arduino.h>
 #include <hardware/pwm.h>
 #include "SmoothAnalogRead.hpp"
-#include "Oscillator.hpp"
+#include "ClockGenerator.hpp"
 #include "note.h"
 #include "EepromData.h"
 
@@ -16,7 +16,7 @@
 #define LED_LOWER D2
 #define DCO_BIAS D6
 #define DCO_CLOCK D7
-#define FREQ_TONE D0
+#define SYNC_FM_SW D0
 #define TUNE_FINE A3
 #define COARSE A2
 #define VOCT A1
@@ -45,7 +45,7 @@ static SmoothAnalogRead vOct(VOCT);
 static SmoothAnalogRead potCoarse(COARSE);
 static SmoothAnalogRead potAux(TUNE_FINE);
 static SmoothAnalogRead potFM(FREQMOD);
-static Oscillator osc;
+static ClockGenerator clockGen;
 
 // const static float rateRatio = (float)ADC_RESO / (float)MAX_COARSE_FREQ;
 const static float fmRatio = (float)ADC_RESO / (float)MAX_FREQ;
@@ -64,8 +64,8 @@ void interruptPWM()
     pwm_clear_irq(interruptSliceNum);
     // digitalWrite(GATE_A, HIGH);
 
-    bool pulse = osc.getWaveValue() > 0 ? HIGH : LOW;
-    gpio_put(DCO_CLOCK, pulse);
+    clockGen.update();
+    gpio_put(DCO_CLOCK, clockGen.getPulse());
     pwm_set_gpio_level(DCO_BIAS, biasLevel);
 
     // digitalWrite(GATE_A, LOW);
@@ -105,20 +105,12 @@ void setup()
     analogReadResolution(12);
 
     pinMode(DCO_CLOCK, OUTPUT);
-    pinMode(FREQ_TONE, INPUT_PULLUP);
+    pinMode(SYNC_FM_SW, INPUT_PULLUP);
 
-    osc.init(SAMPLE_FREQ);
+    clockGen.init(SAMPLE_FREQ);
 
     initEEPROM();
     loadUserConfig(&userConfig);
-
-    // coarse0でスイッチOFFでvoctチューニングモード
-    // float coarse = (float)potCoarse.analogReadDropLow4bit() / rateRatio;
-    // float coarse = EXP_CURVE((float)potCoarse.analogReadDropLow4bit(), 2.0) * MAX_COARSE_FREQ;
-    // if (coarse == 0 && digitalRead(FREQ_TONE) == LOW)
-    // {
-    //     configMode = 1;
-    // }
 
     initPWM(DCO_BIAS);
     initPWM(LED_UPPER);
@@ -136,7 +128,9 @@ void loop()
     uint16_t fineIn = potAux.analogRead(false);
     uint16_t syncFmIn = potFM.analogReadDirect();
 
-    if (coarse <= 10 && fineIn <= 5 && digitalRead(FREQ_TONE) == LOW)
+    // coarse:0 fine:0 sync/fm swをsync側でV/OCTチューニングモード
+    // モード終了（保存）はsync/fm swをfm側へ
+    if (coarse <= 10 && fineIn <= 5 && digitalRead(SYNC_FM_SW) == LOW)
     {
         configMode = 1;
     }
@@ -147,7 +141,7 @@ void loop()
     if (configMode == 1)
     {
         // V/OCTのHIGH側微調整
-        if (digitalRead(FREQ_TONE) == LOW)
+        if (digitalRead(SYNC_FM_SW) == LOW)
         {
             userConfig.voctTune = (fineIn / ((float)ADC_RESO / 400.0)) - (400 >> 1);
         }
@@ -162,7 +156,7 @@ void loop()
     }
     else
     {
-        pwm_set_gpio_level(LED_UPPER, osc.getValue());
+        pwm_set_gpio_level(LED_UPPER, clockGen.getValue());
         pwm_set_gpio_level(LED_LOWER, biasLevel);
 
         float fineWidth = 0;
@@ -181,14 +175,14 @@ void loop()
         
         vFine = (fineIn / ((float)ADC_RESO / fineWidth)) - (fineWidth / 2);
 
-        if (digitalRead(FREQ_TONE) == LOW)
+        if (digitalRead(SYNC_FM_SW) == LOW)
         {
             // Hard Sync
             static uint8_t lastTrig = 0;
             uint8_t trig = syncFmIn > 2047 ? 1 : 0;
             if (trig == 0 && lastTrig == 1)
             {
-                osc.reset();
+                clockGen.reset();
             }
             lastTrig = trig;
         }
@@ -203,7 +197,7 @@ void loop()
     // 0to5VのV/OCTの想定でmap変換。RP2040では抵抗分圧で5V->3.3Vにしておく
     float freqency = (coarse + vFine) *
                             (float)pow(2, map(voct, 0, ADC_RESO - userConfig.voctTune, 0, DAC_MAX_MILLVOLT) * 0.001) + fm;
-    osc.setFrequency(freqency);
+    clockGen.setFrequency(freqency);
     biasLevel = map((uint16_t)freqency, 0, MAX_FREQ, 30, PWM_RESO); // 下限は波形みながら調整
 
     static uint8_t dispCount = 0;

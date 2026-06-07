@@ -1,6 +1,6 @@
 /*!
- * Oscillator class
- * Copyright 2023 marksard
+ * ClockGenerator class
+ * Copyright 2024 marksard
  * This software is released under the MIT license.
  * see https://opensource.org/licenses/MIT
  */ 
@@ -11,29 +11,20 @@
 #define WAVE_LENGTH 4096
 #define WAVE_LENGTH_BIT 12
 
-#ifdef USE_MCP4922
-// #include "sine_12bit_4096.h"
 #define WAVE_INDEX_DIV_BIT 0
 #define WAVE_HEIGHT 4096
-#else
-// #include "sine_11bit_4096.h"
-// #define WAVE_INDEX_DIV_BIT 1
-// #define WAVE_HEIGHT 2048
-#define WAVE_INDEX_DIV_BIT 0
-#define WAVE_HEIGHT 4096
-#endif
 
 #define OSC_WAVE_BIT 32
 #define OSC_WAVE_BIT32 4294967296 // 2^32
 
-class Oscillator
+class ClockGenerator
 {
 public:
-    // 上位12ビット(0~4095)をindex範囲にする
+    // 上位ビットをindex範囲にする
     const uint32_t indexBit = OSC_WAVE_BIT - WAVE_LENGTH_BIT;
 
 public:
-    Oscillator()
+    ClockGenerator()
     {
     }
 
@@ -50,10 +41,7 @@ public:
         _value = 0;
     }
 
-    // value範囲＝DAC、PWM出力範囲：0-4095(12bit)
-    // index範囲：0-4095(12bit)
-    // とした。sine以外は単純な演算のみで済む
-    uint16_t getWaveValue()
+    uint16_t update()
     {
         _phaseAccum = _phaseAccum + _tuningWordM;
         uint32_t index = _phaseAccum >> indexBit;
@@ -77,6 +65,7 @@ public:
 
     float getFrequency() { return _frequency; }
     uint16_t getValue() { return _value; }
+    uint8_t getPulse() { return _value > 0 ? HIGH : LOW; }
 
 private:
     float _frequency;
