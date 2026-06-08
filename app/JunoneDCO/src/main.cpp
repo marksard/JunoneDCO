@@ -77,7 +77,7 @@ void interruptPWM()
 {
     pwm_clear_irq(interruptSliceNum);
 
-    gpio_put(DCO_CLOCK, clockGen.getWaveValue());
+    gpio_put(DCO_CLOCK, clockGen.getWaveValue() > 0 ? true : false);
 }
 
 void setup()
