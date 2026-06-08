@@ -35,11 +35,11 @@
 #define DAC_BIT 12
 #define DAC_RESO 4096
 // #define SAMPLE_FREQ (((float)(CPU_CLOCK) / (float)INTR_PWM_RESO) / (float)SAMPLE_FREQ_DIVIDER)
-#define SAMPLE_FREQ 192000 //一応この辺までいける
+#define SAMPLE_FREQ 192000 //192kHz
 
 // DCO
 #define MAX_COARSE_FREQ 550
-#define MAX_FREQ 5000
+#define MAX_FREQ 10000
 
 // 基本設定
 struct SystemConfig
@@ -50,7 +50,7 @@ struct SystemConfig
 
     SystemConfig()
     {
-        vRef = 3.30f;
+        vRef = 3.31f;
         noiseFloor = 32.0f;
     }
 };
@@ -119,7 +119,7 @@ void loop()
     uint16_t voctValue = vOct.analogReadDirectFast();
     uint16_t coarseValue = potCoarse.analogRead(false);
     uint16_t fineIn = potFine.analogRead(false);
-    uint16_t syncFmIn = potFM.analogReadDirectFast();
+    int16_t syncFmIn = potFM.analogReadDirectFast();
       
     float fm = 0;
     if (digitalRead(SYNC_FM_SW) == LOW)
@@ -135,14 +135,14 @@ void loop()
     }
     else
     {
-        // -32はノイズの影響を抑えるため
-        fm = max((float)(syncFmIn - 32) / fmRatio, 0);
+        // ノイズの影響を抑えるため下限を設ける
+        fm = max((float)(max(syncFmIn - 48, 0)) / fmRatio, 0);
     }
 
     float voctPowV = adcErrorCorrection.voctPow(voctValue);
     float vOctFreq = (voctCoarse + voctFine) * voctPowV + fm;
     clockGen.setFrequency(vOctFreq);
-    biasLevel = map((uint16_t)vOctFreq, 0, MAX_FREQ, 30, PWM_RESO); // 下限は波形みながら調整
+    biasLevel = map((uint16_t)vOctFreq, 0, MAX_FREQ, 10, PWM_RESO); // 下限は波形みながら調整
     
     pwm_set_gpio_level(LED_UPPER, clockGen.getValue());
     pwm_set_gpio_level(LED_LOWER, biasLevel);
@@ -163,6 +163,8 @@ void loop()
     //     Serial.print(biasLevel);
     //     Serial.print(", ");
     //     Serial.print(fm);
+    //     Serial.print(", ");
+    //     Serial.print(syncFmIn);
     //     Serial.println();
     // }
 
@@ -183,7 +185,7 @@ void loop1()
     voctCoarse = (float)coarseValue / rateRatio;
     // Aカーブポットに模擬
     // voctCoarse = EXP_CURVE((float)coarseValue, 2.0) * MAX_COARSE_FREQ;
-    voctCoarse = max(voctCoarse, 10);
+    // voctCoarse = max(voctCoarse, 10);
 
     float fineWidth = 0;
     for (int i = 127; i >= 0; --i)
